@@ -54,6 +54,7 @@ export default function AuthPage() {
 
   const registerForm = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
+    mode: "onChange", // Enable validation on change
     defaultValues: {
       username: "",
       email: "",
