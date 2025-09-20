@@ -1,0 +1,51 @@
+Build a fully functional minimal e-commerce website for selling electronics like monitors, keyboards, mice, and audio equipment. The tech stack must be:
+
+- Frontend: React + TypeScript
+- Backend: Express.js (Node.js)
+- Database: PostgreSQL
+
+### Requirements:
+
+1. Pages:
+   - Home Page: Show featured banners, categories, and deal of the day.
+   - Products Page: Display all products with images, prices, ratings, and "Add to Cart" button.
+   - Contact Page: Simple form with name, email, message stored in database.
+   - Cart Page: Show products added by the user with total price and "Proceed to Order" button.
+   - Login & Signup Page: User authentication with PostgreSQL (store user credentials securely).
+   - Order Page: Minimal order form to capture delivery details (name, address, phone, email). Store order details in PostgreSQL.
+
+2. Functionality:
+   - Fully mobile responsive UI (clean and minimal).
+   - Navbar with links to all pages + cart icon with item count.
+   - Authentication system (signup, login, logout).
+   - Cart system (add, remove items, persist for logged-in user).
+   - Orders stored in PostgreSQL along with product details and user info.
+   - Contact form submissions saved in PostgreSQL.
+
+3. UI:
+   - Use the provided sample UI style as reference (modern, minimal, black/blue theme).
+   - Responsive for both desktop and mobile.
+   - Product grid, category cards, banners, and buttons should look polished.
+
+4. Backend:
+   - Express.js routes for authentication, products, cart, orders, and contact form.
+   - PostgreSQL integration with Sequelize or Prisma ORM.
+   - REST API endpoints for frontend to fetch/add data.
+
+5. Database (PostgreSQL):
+   - Users table (id, name, email, password hash).
+   - Products table (id, name, category, price, rating, image).
+   - Orders table (id, userId, productId(s), order details, timestamp).
+   - Contact table (id, name, email, message, timestamp).
+   - Cart table (id, userId, productId, quantity).
+
+6. Notes:
+   - Budget is minimal, so keep the design simple but professional.
+   - No complex payment gateway needed, just store orders from the order form.
+   - Use sample product data for monitors, keyboards, mice, audio, and accessories.
+
+Output should include:
+- Full React + TypeScript frontend code
+- Express.js backend with REST APIs
+- PostgreSQL schema and integration code
+- Instructions to run the project
