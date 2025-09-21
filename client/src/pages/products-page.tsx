@@ -17,7 +17,7 @@ export default function ProductsPage() {
   const [location] = useLocation();
   const searchParams = new URLSearchParams(location.split('?')[1] || '');
   const categoryFilter = searchParams.get('category') || '';
-  
+
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState("popular");
   const [stockFilter, setStockFilter] = useState("in-stock");
@@ -26,23 +26,27 @@ export default function ProductsPage() {
     queryKey: ["/api/products", categoryFilter],
     queryFn: async () => {
       console.log('Fetching products from API...');
-      const response = await fetch(`/api/products${categoryFilter ? `?category=${categoryFilter}` : ''}`);
-      
+      const API_BASE_URL = import.meta.env.VITE_API_URL || "";
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/products${categoryFilter ? `?category=${categoryFilter}` : ''}`
+      );
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error('Failed to fetch products:', response.status, errorText);
         throw new Error(`Failed to fetch products: ${response.status}`);
       }
-      
+
       const data = await response.json();
       console.log('Received products data:', data);
-      
+
       // Validate the response structure
       if (!data || !Array.isArray(data.products)) {
         console.error('Invalid products response structure:', data);
         throw new Error('Invalid response structure');
       }
-      
+
       return data;
     },
     retry: 3,
@@ -65,13 +69,13 @@ export default function ProductsPage() {
 
   // Filter and sort products
   const filteredProducts = products.filter(product => {
-      const matchesSearch = (product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (product.category || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          (product.description || '').toLowerCase().includes(searchTerm.toLowerCase());
-      
-      const matchesStock = stockFilter === "all" || (product.inStock != null && product.inStock > 0);
-      return matchesSearch && matchesStock;
-    })
+    const matchesSearch = (product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (product.category || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (product.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStock = stockFilter === "all" || (product.inStock != null && product.inStock > 0);
+    return matchesSearch && matchesStock;
+  })
     .sort((a, b) => {
       switch (sortBy) {
         case "price-low":
@@ -93,14 +97,14 @@ export default function ProductsPage() {
       }
     });
 
-  const pageTitle = categoryFilter 
-    ? `${categoryFilter.charAt(0).toUpperCase() + categoryFilter.slice(1)} Products` 
+  const pageTitle = categoryFilter
+    ? `${categoryFilter.charAt(0).toUpperCase() + categoryFilter.slice(1)} Products`
     : 'All Products';
 
   return (
     <div>
       <Navbar />
-      
+
       <main>
         <section className="py-8 bg-muted/30">
           <div className="container mx-auto px-4">
@@ -121,7 +125,7 @@ export default function ProductsPage() {
                   />
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 </div>
-                
+
                 {/* Desktop Search */}
                 <div className="relative hidden lg:block w-80">
                   <Input
@@ -134,7 +138,7 @@ export default function ProductsPage() {
                   />
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 </div>
-                
+
                 {/* Filters */}
                 <div className="flex gap-2">
                   <Select value={sortBy} onValueChange={setSortBy}>
@@ -149,7 +153,7 @@ export default function ProductsPage() {
                       <SelectItem value="rating">Rating</SelectItem>
                     </SelectContent>
                   </Select>
-                  
+
                   <Select value={stockFilter} onValueChange={setStockFilter}>
                     <SelectTrigger className="w-32" data-testid="select-stock">
                       <SelectValue placeholder="Stock" />
@@ -162,7 +166,7 @@ export default function ProductsPage() {
                 </div>
               </div>
             </div>
-            
+
             <div className="text-sm text-muted-foreground mb-6" data-testid="text-product-count">
               {isLoading ? 'Loading...' : `Showing ${filteredProducts.length} products`}
             </div>
@@ -172,8 +176,8 @@ export default function ProductsPage() {
               <div className="text-center py-12">
                 <p className="text-red-500 text-lg mb-2">Failed to load products</p>
                 <p className="text-muted-foreground mb-4">{error?.message || 'Unknown error occurred'}</p>
-                <button 
-                  onClick={() => window.location.reload()} 
+                <button
+                  onClick={() => window.location.reload()}
                   className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
                 >
                   Retry
@@ -210,7 +214,7 @@ export default function ProductsPage() {
               <div className="text-center py-12">
                 <p className="text-muted-foreground text-lg mb-2">No products found matching your criteria.</p>
                 <p className="text-sm text-muted-foreground mb-4">Try adjusting your search term or filters.</p>
-                <button 
+                <button
                   onClick={() => {
                     setSearchTerm('');
                     setStockFilter('in-stock');
