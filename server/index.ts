@@ -16,42 +16,56 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
-app.use(express.static(path.join(__dirname, "../client/dist")));
-
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "../client/dist/index.html"));
-});
-
-
+// ---------------------------
 // CORS configuration
-app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? process.env.FRONTEND_URL || false 
-    : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173', 'http://127.0.0.1:5173'],
-  credentials: true,
-  optionsSuccessStatus: 200
-}));
+// ---------------------------
+app.use(
+  cors({
+    origin:
+      process.env.NODE_ENV === "production"
+        ? process.env.FRONTEND_URL || false
+        : [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173",
+          ],
+    credentials: true,
+    optionsSuccessStatus: 200,
+  })
+);
 
+// ---------------------------
 // Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+// ---------------------------
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: false, limit: "10mb" }));
 
 console.log("NODE_ENV:", process.env.NODE_ENV);
 console.log("PORT:", process.env.PORT || 5000);
-console.log("DATABASE_URL:", process.env.DATABASE_URL ? "✓ Set" : "✗ Missing");
+console.log(
+  "DATABASE_URL:",
+  process.env.DATABASE_URL ? "✓ Set" : "✗ Missing"
+);
 
-// Test database connection on startup
-testConnection().then((connected) => {
-  if (!connected) {
-    console.error("Failed to connect to database. Exiting...");
+// ---------------------------
+// Test database connection
+// ---------------------------
+testConnection()
+  .then((connected) => {
+    if (!connected) {
+      console.error("Failed to connect to database. Exiting...");
+      process.exit(1);
+    }
+  })
+  .catch((error) => {
+    console.error("Database connection test failed:", error);
     process.exit(1);
-  }
-}).catch((error) => {
-  console.error("Database connection test failed:", error);
-  process.exit(1);
-});
+  });
 
+// ---------------------------
 // Logging middleware for API requests
+// ---------------------------
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
@@ -72,8 +86,13 @@ app.use((req, res, next) => {
         if (path === "/api/products" && capturedJsonResponse.products) {
           logLine += ` :: ${capturedJsonResponse.products.length} products`;
         } else {
-          const responsePreview = JSON.stringify(capturedJsonResponse).substring(0, 100);
-          logLine += ` :: ${responsePreview}${JSON.stringify(capturedJsonResponse).length > 100 ? '...' : ''}`;
+          const responsePreview = JSON.stringify(capturedJsonResponse).substring(
+            0,
+            100
+          );
+          logLine += ` :: ${responsePreview}${
+            JSON.stringify(capturedJsonResponse).length > 100 ? "..." : ""
+          }`;
         }
       }
       if (logLine.length > 120) {
@@ -86,51 +105,75 @@ app.use((req, res, next) => {
   next();
 });
 
+// ---------------------------
 // Health check endpoint
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+// ---------------------------
+app.get("/api/health", (req, res) => {
+  res.json({
+    status: "ok",
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
-    database: process.env.DATABASE_URL ? 'connected' : 'not configured'
+    database: process.env.DATABASE_URL ? "connected" : "not configured",
   });
 });
 
 (async () => {
   try {
-    // Register routes (includes auth setup)
+    // ---------------------------
+    // Register API routes (includes auth)
+    // ---------------------------
     const server = registerRoutes(app);
 
+    // ---------------------------
     // Global error handler
-    app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-      const status = err.status || err.statusCode || 500;
-      const message = err.message || "Internal Server Error";
+    // ---------------------------
+    app.use(
+      (err: any, req: Request, res: Response, next: NextFunction) => {
+        const status = err.status || err.statusCode || 500;
+        const message = err.message || "Internal Server Error";
 
-      console.error(`Error ${status}:`, {
-        message,
-        path: req.path,
-        method: req.method,
-        stack: process.env.NODE_ENV === 'development' ? err.stack : 'Hidden in production',
-        timestamp: new Date().toISOString()
-      });
+        console.error(`Error ${status}:`, {
+          message,
+          path: req.path,
+          method: req.method,
+          stack:
+            process.env.NODE_ENV === "development"
+              ? err.stack
+              : "Hidden in production",
+          timestamp: new Date().toISOString(),
+        });
 
-      res.status(status).json({ 
-        message,
-        ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-      });
+        res.status(status).json({
+          message,
+          ...(process.env.NODE_ENV === "development" && { stack: err.stack }),
+        });
+      }
+    );
+
+    // ---------------------------
+    // Static frontend (after API routes)
+    // ---------------------------
+    app.use(express.static(path.join(__dirname, "../client/dist")));
+
+    app.get("*", (req, res) => {
+      res.sendFile(path.join(__dirname, "../client/dist/index.html"));
     });
 
+    // ---------------------------
     // Setup Vite middleware in development
+    // ---------------------------
     if (app.get("env") === "development") {
       await setupVite(app, server);
     } else {
       serveStatic(app);
     }
 
+    // ---------------------------
     // Start server
+    // ---------------------------
     const port = parseInt(process.env.PORT || "5000", 10);
     const host = process.env.HOST || "0.0.0.0";
-    
+
     server.listen(port, host, () => {
       log(`🚀 Server running on http://${host}:${port}`);
       log(`📊 Health check available at http://${host}:${port}/api/health`);
@@ -138,25 +181,26 @@ app.get('/api/health', (req, res) => {
       log(`🔧 Debug endpoint: http://${host}:${port}/api/debug/products`);
     });
 
+    // ---------------------------
     // Graceful shutdown
-    process.on('SIGTERM', () => {
-      console.log('SIGTERM received. Shutting down gracefully...');
+    // ---------------------------
+    process.on("SIGTERM", () => {
+      console.log("SIGTERM received. Shutting down gracefully...");
       server.close(() => {
-        console.log('Process terminated');
+        console.log("Process terminated");
         process.exit(0);
       });
     });
 
-    process.on('SIGINT', () => {
-      console.log('SIGINT received. Shutting down gracefully...');
+    process.on("SIGINT", () => {
+      console.log("SIGINT received. Shutting down gracefully...");
       server.close(() => {
-        console.log('Process terminated');
+        console.log("Process terminated");
         process.exit(0);
       });
     });
-
   } catch (error) {
-    console.error('Failed to start server:', error);
+    console.error("Failed to start server:", error);
     process.exit(1);
   }
 })();
