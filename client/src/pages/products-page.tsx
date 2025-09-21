@@ -9,6 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search } from "lucide-react";
 
+interface ProductsResponse {
+  products: Product[];
+}
+
 export default function ProductsPage() {
   const [location] = useLocation();
   const searchParams = new URLSearchParams(location.split('?')[1] || '');
@@ -18,31 +22,80 @@ export default function ProductsPage() {
   const [sortBy, setSortBy] = useState("popular");
   const [stockFilter, setStockFilter] = useState("in-stock");
 
-  const { data: products = [], isLoading } = useQuery<Product[]>({
+  const { data: productsData, isLoading, error, isError } = useQuery<ProductsResponse>({
     queryKey: ["/api/products", categoryFilter],
-    queryFn: () => fetch(`/api/products${categoryFilter ? `?category=${categoryFilter}` : ''}`).then(res => res.json()),
+    queryFn: async () => {
+      console.log('Fetching products from API...');
+      const response = await fetch(`/api/products${categoryFilter ? `?category=${categoryFilter}` : ''}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to fetch products:', response.status, errorText);
+        throw new Error(`Failed to fetch products: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log('Received products data:', data);
+      
+      // Validate the response structure
+      if (!data || !Array.isArray(data.products)) {
+        console.error('Invalid products response structure:', data);
+        throw new Error('Invalid response structure');
+      }
+      
+      return data;
+    },
+    retry: 3,
+    retryDelay: 1000,
+  });
+
+  const products = productsData?.products || [];
+
+  // Debug logging
+  console.log('Products Page State:', {
+    isLoading,
+    isError,
+    error: error?.message,
+    productsCount: products.length,
+    categoryFilter,
+    searchTerm,
+    sortBy,
+    stockFilter
   });
 
   // Filter and sort products
-  const filteredProducts = products
-    .filter(product => {
-      const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          product.category.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesStock = stockFilter === "all" || product.inStock > 0;
+  const filteredProducts = products.filter(product => {
+      const matchesSearch = (product.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (product.category || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (product.description || '').toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesStock = stockFilter === "all" || (product.inStock != null && product.inStock > 0);
       return matchesSearch && matchesStock;
     })
     .sort((a, b) => {
       switch (sortBy) {
         case "price-low":
-          return parseFloat(a.price) - parseFloat(b.price);
+          const priceA = a.price ? parseFloat(String(a.price)) : 0;
+          const priceB = b.price ? parseFloat(String(b.price)) : 0;
+          return priceA - priceB;
         case "price-high":
-          return parseFloat(b.price) - parseFloat(a.price);
+          const priceA2 = a.price ? parseFloat(String(a.price)) : 0;
+          const priceB2 = b.price ? parseFloat(String(b.price)) : 0;
+          return priceB2 - priceA2;
         case "rating":
-          return parseFloat(b.rating) - parseFloat(a.rating);
+          const aRating = a.rating ? parseFloat(String(a.rating)) : 0;
+          const bRating = b.rating ? parseFloat(String(b.rating)) : 0;
+          return bRating - aRating;
+        case "name":
+          return (a.name || '').localeCompare(b.name || '');
         default:
           return 0;
       }
     });
+
+  const pageTitle = categoryFilter 
+    ? `${categoryFilter.charAt(0).toUpperCase() + categoryFilter.slice(1)} Products` 
+    : 'All Products';
 
   return (
     <div>
@@ -53,7 +106,7 @@ export default function ProductsPage() {
           <div className="container mx-auto px-4">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-8">
               <h2 className="text-2xl font-bold mb-4 lg:mb-0">
-                {categoryFilter ? `${categoryFilter.charAt(0).toUpperCase() + categoryFilter.slice(1)} Products` : 'All Products'}
+                {pageTitle}
               </h2>
               <div className="flex flex-col sm:flex-row gap-4 w-full lg:w-auto">
                 {/* Search Bar */}
@@ -90,6 +143,7 @@ export default function ProductsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="popular">Sort Popular</SelectItem>
+                      <SelectItem value="name">Name A-Z</SelectItem>
                       <SelectItem value="price-low">Price: Low to High</SelectItem>
                       <SelectItem value="price-high">Price: High to Low</SelectItem>
                       <SelectItem value="rating">Rating</SelectItem>
@@ -110,21 +164,67 @@ export default function ProductsPage() {
             </div>
             
             <div className="text-sm text-muted-foreground mb-6" data-testid="text-product-count">
-              Showing {filteredProducts.length} products
+              {isLoading ? 'Loading...' : `Showing ${filteredProducts.length} products`}
             </div>
 
-            {/* Product Grid */}
-            {isLoading ? (
+            {/* Error State */}
+            {isError && (
+              <div className="text-center py-12">
+                <p className="text-red-500 text-lg mb-2">Failed to load products</p>
+                <p className="text-muted-foreground mb-4">{error?.message || 'Unknown error occurred'}</p>
+                <button 
+                  onClick={() => window.location.reload()} 
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+
+            {/* Loading State */}
+            {isLoading && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
                 {[...Array(8)].map((_, i) => (
-                  <div key={i} className="bg-card rounded-xl border border-border h-80 animate-pulse" />
+                  <div key={i} className="bg-card rounded-xl border border-border h-80 animate-pulse">
+                    <div className="h-48 bg-muted rounded-t-xl mb-4"></div>
+                    <div className="p-4 space-y-2">
+                      <div className="h-4 bg-muted rounded w-3/4"></div>
+                      <div className="h-4 bg-muted rounded w-1/2"></div>
+                      <div className="h-8 bg-muted rounded w-full"></div>
+                    </div>
+                  </div>
                 ))}
               </div>
-            ) : filteredProducts.length === 0 ? (
+            )}
+
+            {/* No Products State */}
+            {!isLoading && !isError && filteredProducts.length === 0 && products.length === 0 && (
               <div className="text-center py-12">
-                <p className="text-muted-foreground text-lg">No products found matching your criteria.</p>
+                <p className="text-muted-foreground text-lg mb-4">No products available.</p>
+                <p className="text-sm text-muted-foreground">Please try again later or contact support.</p>
               </div>
-            ) : (
+            )}
+
+            {/* No Search Results */}
+            {!isLoading && !isError && filteredProducts.length === 0 && products.length > 0 && (
+              <div className="text-center py-12">
+                <p className="text-muted-foreground text-lg mb-2">No products found matching your criteria.</p>
+                <p className="text-sm text-muted-foreground mb-4">Try adjusting your search term or filters.</p>
+                <button 
+                  onClick={() => {
+                    setSearchTerm('');
+                    setStockFilter('in-stock');
+                    setSortBy('popular');
+                  }}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90"
+                >
+                  Clear Filters
+                </button>
+              </div>
+            )}
+
+            {/* Product Grid */}
+            {!isLoading && !isError && filteredProducts.length > 0 && (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
                 {filteredProducts.map((product) => (
                   <ProductCard key={product.id} product={product} />

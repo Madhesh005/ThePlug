@@ -5,30 +5,25 @@ import { Cart, Product } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Microchip, Search, ShoppingCart, Menu, User, Phone, Mail } from "lucide-react";
+import { Microchip, ShoppingCart, Menu, User, Phone, Mail } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import ThePlug from "../attached_assets/ThePlug.png";
 
 type CartItem = Cart & { product: Product };
 
 export default function Navbar() {
   const [location, navigate] = useLocation();
   const { user, logoutMutation } = useAuth();
-  const [searchTerm, setSearchTerm] = useState("");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const { data: cartItems = [] } = useQuery<CartItem[]>({
     queryKey: ["/api/cart"],
     enabled: !!user,
   });
+  const itemsArray = Array.isArray(cartItems) ? cartItems : [];
+  const cartItemCount = itemsArray.reduce((sum, item) => sum + (item.quantity || 0), 0);
+  console.log(cartItems);
 
-  const cartItemCount = cartItems.reduce((sum, item) => sum + item.quantity, 0);
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchTerm.trim()) {
-      navigate(`/products?search=${encodeURIComponent(searchTerm.trim())}`);
-    }
-  };
 
   const handleLogout = () => {
     logoutMutation.mutate();
@@ -47,21 +42,33 @@ export default function Navbar() {
         {/* Top Bar - Desktop Only */}
         <div className="hidden md:flex justify-between items-center py-2 text-sm text-muted-foreground border-b border-border">
           <div className="flex items-center space-x-6">
-            <span className="flex items-center">
+            <a 
+              href="https://wa.me/918939117117" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center hover:text-green-600 transition-colors cursor-pointer"
+              title="Contact us on WhatsApp"
+            >
               <Phone className="mr-2 h-4 w-4" />
-              +1 (800) 555-0130
-            </span>
-            <span className="flex items-center">
+              +91 89391 17117
+            </a>
+            <a 
+              href="mailto:Subramani2692@gmail.com" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="flex items-center hover:text-red-600 transition-colors cursor-pointer"
+              title="Send us an email"
+            >
               <Mail className="mr-2 h-4 w-4" />
-              support@techmart.com
-            </span>
+              Subramani2692@gmail.com
+            </a>
           </div>
           <div className="flex items-center space-x-4">
             {user ? (
               <>
                 <span>Welcome, {user.firstName}!</span>
-                <Button 
-                  variant="link" 
+                <Button
+                  variant="link"
                   className="text-muted-foreground hover:text-primary p-0 h-auto"
                   onClick={handleLogout}
                   disabled={logoutMutation.isPending}
@@ -86,27 +93,26 @@ export default function Navbar() {
             )}
           </div>
         </div>
-        
+
         {/* Main Navigation */}
         <div className="flex items-center justify-between py-4">
           <div className="flex items-center space-x-8">
             {/* Logo */}
             <Link href="/">
               <div className="flex items-center cursor-pointer" data-testid="logo">
-                <Microchip className="text-2xl text-primary mr-3 h-8 w-8" />
-                <span className="text-xl font-bold">TechMart</span>
+                <img src={ThePlug} alt="business_logo" className="h-10 w-auto object-contain" />
+                <span className="text-xl font-bold">The PluG</span>
               </div>
             </Link>
-            
+
             {/* Desktop Navigation */}
             <nav className="hidden lg:flex items-center space-x-6">
               {navLinks.map((link) => (
                 <Link key={link.href} href={link.href}>
-                  <Button 
-                    variant="link" 
-                    className={`hover:text-primary transition-colors p-0 h-auto ${
-                      link.active ? "text-primary font-medium" : ""
-                    }`}
+                  <Button
+                    variant="link"
+                    className={`hover:text-primary transition-colors p-0 h-auto ${link.active ? "text-primary font-medium" : ""
+                      }`}
                     data-testid={`nav-${link.label.toLowerCase().replace(" ", "-")}`}
                   >
                     {link.label}
@@ -115,38 +121,16 @@ export default function Navbar() {
               ))}
             </nav>
           </div>
-          
-          {/* Search Bar - Desktop */}
-          <div className="hidden md:flex flex-1 max-w-md mx-8">
-            <form onSubmit={handleSearch} className="relative w-full">
-              <Input
-                type="text"
-                placeholder="Search electronics: keyboards, monitors, audio..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-                data-testid="input-search"
-              />
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            </form>
-          </div>
-          
+
+ 
           {/* Right Side Actions */}
           <div className="flex items-center space-x-4">
-            {/* Account Button (Desktop) */}
-            {user && (
-              <Button variant="secondary" className="hidden md:flex items-center space-x-2" data-testid="button-account">
-                <User className="h-4 w-4" />
-                <span>Account</span>
-              </Button>
-            )}
-            
             {/* Cart */}
             <Link href="/cart">
               <Button variant="ghost" className="relative p-2" data-testid="button-cart">
                 <ShoppingCart className="h-6 w-6 text-primary" />
                 {cartItemCount > 0 && (
-                  <span 
+                  <span
                     className="absolute -top-1 -right-1 cart-badge text-white text-xs rounded-full h-5 w-5 flex items-center justify-center font-bold"
                     data-testid="text-cart-count"
                   >
@@ -155,7 +139,7 @@ export default function Navbar() {
                 )}
               </Button>
             </Link>
-            
+
             {/* Mobile Menu Toggle */}
             <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
               <SheetTrigger asChild>
@@ -165,28 +149,40 @@ export default function Navbar() {
               </SheetTrigger>
               <SheetContent side="left" className="w-64">
                 <div className="flex items-center mb-6">
-                  <Microchip className="text-2xl text-primary mr-3 h-8 w-8" />
-                  <span className="text-xl font-bold">TechMart</span>
+                  <img src={ThePlug} alt="business_logo" className="h-8 w-auto object-contain mr-3" />
+                  <span className="text-xl font-bold">The PluG</span>
                 </div>
-                
-                {/* Mobile Search */}
-                <form onSubmit={handleSearch} className="relative w-full mb-6">
-                  <Input
-                    type="text"
-                    placeholder="Search products..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
-                    data-testid="input-search-mobile"
-                  />
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                </form>
-                
+
+                {/* Mobile Contact Info */}
+                <div className="mb-6 space-y-2">
+                  <a 
+                    href="https://wa.me/918939117117" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center text-sm text-muted-foreground hover:text-green-600 transition-colors"
+                    title="Contact us on WhatsApp"
+                  >
+                    <Phone className="mr-2 h-4 w-4" />
+                    +91 89391 17117
+                  </a>
+                  <a 
+                    href="mailto:Subramani2692@gmail.com" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex items-center text-sm text-muted-foreground hover:text-red-600 transition-colors"
+                    title="Send us an email"
+                  >
+                    <Mail className="mr-2 h-4 w-4" />
+                    Subramani2692@gmail.com
+                  </a>
+                </div>
+
+
                 <nav className="space-y-4">
                   {navLinks.map((link) => (
                     <Link key={link.href} href={link.href}>
-                      <Button 
-                        variant="ghost" 
+                      <Button
+                        variant="ghost"
                         className={`w-full justify-start ${link.active ? "bg-accent" : ""}`}
                         onClick={() => setIsMobileMenuOpen(false)}
                         data-testid={`mobile-nav-${link.label.toLowerCase().replace(" ", "-")}`}
@@ -195,16 +191,16 @@ export default function Navbar() {
                       </Button>
                     </Link>
                   ))}
-                  
+
                   <hr className="border-border" />
-                  
+
                   {user ? (
                     <>
                       <div className="px-4 py-2 text-sm text-muted-foreground">
                         Welcome, {user.firstName}!
                       </div>
-                      <Button 
-                        variant="ghost" 
+                      <Button
+                        variant="ghost"
                         className="w-full justify-start"
                         onClick={handleLogout}
                         disabled={logoutMutation.isPending}
@@ -216,8 +212,8 @@ export default function Navbar() {
                   ) : (
                     <>
                       <Link href="/auth">
-                        <Button 
-                          variant="ghost" 
+                        <Button
+                          variant="ghost"
                           className="w-full justify-start"
                           onClick={() => setIsMobileMenuOpen(false)}
                           data-testid="button-mobile-login"
@@ -226,8 +222,8 @@ export default function Navbar() {
                         </Button>
                       </Link>
                       <Link href="/auth">
-                        <Button 
-                          variant="ghost" 
+                        <Button
+                          variant="ghost"
                           className="w-full justify-start"
                           onClick={() => setIsMobileMenuOpen(false)}
                           data-testid="button-mobile-signup"

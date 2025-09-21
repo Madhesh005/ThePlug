@@ -13,19 +13,40 @@ import { Link } from "wouter";
 
 type CartItem = Cart & { product: Product };
 
+interface CartResponse {
+  cartItems: CartItem[];
+}
+
 export default function CartPage() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const { data: cartItems = [], isLoading } = useQuery<CartItem[]>({
+  const { data: cartData, isLoading } = useQuery<CartResponse>({
     queryKey: ["/api/cart"],
+    queryFn: async () => {
+      const response = await fetch("/api/cart", {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error("Please log in to view your cart");
+        }
+        throw new Error("Failed to fetch cart");
+      }
+      return response.json();
+    },
     enabled: !!user,
   });
 
+  const cartItems = cartData?.cartItems || [];
+
   const updateQuantityMutation = useMutation({
     mutationFn: async ({ productId, quantity }: { productId: string; quantity: number }) => {
-      const res = await apiRequest("PUT", `/api/cart/${productId}`, { quantity });
-      return await res.json();
+      const response = await apiRequest("PUT", `/api/cart/${productId}`, { quantity });
+      if (!response.ok) {
+        throw new Error("Failed to update quantity");
+      }
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
@@ -41,7 +62,11 @@ export default function CartPage() {
 
   const removeItemMutation = useMutation({
     mutationFn: async (productId: string) => {
-      await apiRequest("DELETE", `/api/cart/${productId}`);
+      const response = await apiRequest("DELETE", `/api/cart/${productId}`);
+      if (!response.ok) {
+        throw new Error("Failed to remove item");
+      }
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
@@ -61,13 +86,24 @@ export default function CartPage() {
 
   const clearCartMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("DELETE", "/api/cart");
+      const response = await apiRequest("DELETE", "/api/cart");
+      if (!response.ok) {
+        throw new Error("Failed to clear cart");
+      }
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
       toast({
         title: "Cart cleared",
         description: "All items have been removed from your cart.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to clear cart",
+        description: error.message,
+        variant: "destructive",
       });
     },
   });
@@ -83,6 +119,24 @@ export default function CartPage() {
       updateQuantityMutation.mutate({ productId, quantity: newQuantity });
     }
   };
+
+  if (!user) {
+    return (
+      <div>
+        <Navbar />
+        <main className="py-8">
+          <div className="container mx-auto px-4 text-center">
+            <h2 className="text-2xl font-bold mb-4">Please log in</h2>
+            <p className="text-muted-foreground mb-8">You need to be logged in to view your cart.</p>
+            <Link href="/auth">
+              <Button data-testid="button-login">Log In</Button>
+            </Link>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -162,7 +216,7 @@ export default function CartPage() {
                                 </Button>
                               </div>
                               <span className="font-semibold text-primary" data-testid={`text-price-${item.product.id}`}>
-                                ${item.product.price}
+                                ₹{item.product.price}
                               </span>
                               <Button
                                 variant="ghost"
@@ -190,7 +244,7 @@ export default function CartPage() {
                       <div className="space-y-3 mb-4">
                         <div className="flex justify-between">
                           <span>Subtotal</span>
-                          <span data-testid="text-subtotal">${subtotal.toFixed(2)}</span>
+                          <span data-testid="text-subtotal">₹{subtotal.toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between">
                           <span>Shipping</span>
@@ -198,12 +252,12 @@ export default function CartPage() {
                         </div>
                         <div className="flex justify-between">
                           <span>Tax</span>
-                          <span data-testid="text-tax">${tax.toFixed(2)}</span>
+                          <span data-testid="text-tax">₹{tax.toFixed(2)}</span>
                         </div>
                         <Separator />
                         <div className="flex justify-between font-semibold text-lg">
                           <span>Total</span>
-                          <span className="text-primary" data-testid="text-total">${total.toFixed(2)}</span>
+                          <span className="text-primary" data-testid="text-total">₹{total.toFixed(2)}</span>
                         </div>
                       </div>
                       <div className="space-y-3">

@@ -1,130 +1,107 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, uuid, jsonb } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
-import { createInsertSchema } from "drizzle-zod";
+import { pgTable, text, varchar, decimal, integer, timestamp, uuid, boolean } from "drizzle-orm/pg-core";
+import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// Users table
 export const users = pgTable("users", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  email: text("email").notNull().unique(),
+  id: uuid("id").defaultRandom().primaryKey(),
+  username: varchar("username", { length: 50 }).notNull().unique(),
+  email: varchar("email", { length: 100 }).notNull().unique(),
+  firstName: varchar("first_name", { length: 50 }).notNull(),
+  lastName: varchar("last_name", { length: 50 }).notNull(),
   password: text("password").notNull(),
-  firstName: text("first_name").notNull(),
-  lastName: text("last_name").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Products table - Fixed column mappings
 export const products = pgTable("products", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  name: text("name").notNull(),
-  category: text("category").notNull(),
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  category: varchar("category", { length: 100 }).notNull(),
   price: decimal("price", { precision: 10, scale: 2 }).notNull(),
-  originalPrice: decimal("original_price", { precision: 10, scale: 2 }),
-  rating: decimal("rating", { precision: 2, scale: 1 }).notNull().default("0.0"),
-  image: text("image").notNull(),
+  originalPrice: decimal("originalprice", { precision: 10, scale: 2 }), // Fixed: was "original_price"
+  rating: decimal("rating", { precision: 2, scale: 1 }),
+  image: text("image"),
   description: text("description"),
-  inStock: integer("in_stock").notNull().default(1),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  inStock: integer("instock").default(0), // Fixed: was "in_stock"
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Cart table
 export const cart = pgTable("cart", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
   productId: uuid("product_id").references(() => products.id, { onDelete: "cascade" }).notNull(),
-  quantity: integer("quantity").notNull().default(1),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  quantity: integer("quantity").default(1).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Orders table
 export const orders = pgTable("orders", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: uuid("id").defaultRandom().primaryKey(),
   userId: uuid("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
-  items: jsonb("items").notNull(), // Array of {productId, quantity, price, name}
-  totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
-  firstName: text("first_name").notNull(),
-  lastName: text("last_name").notNull(),
-  email: text("email").notNull(),
-  phone: text("phone").notNull(),
-  address: text("address").notNull(),
-  city: text("city").notNull(),
-  zipCode: text("zip_code").notNull(),
-  notes: text("notes"),
-  status: text("status").notNull().default("pending"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  items: text("items").notNull(), // JSON string of order items
+  total: decimal("total", { precision: 10, scale: 2 }).notNull(),
+  status: varchar("status", { length: 50 }).default("pending"),
+  shippingAddress: text("shipping_address"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Contacts table
 export const contacts = pgTable("contacts", {
-  id: uuid("id").primaryKey().default(sql`gen_random_uuid()`),
-  firstName: text("first_name").notNull(),
-  lastName: text("last_name").notNull(),
-  email: text("email").notNull(),
-  orderNumber: text("order_number"),
-  topic: text("topic").notNull(),
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  email: varchar("email", { length: 100 }).notNull(),
   message: text("message").notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Relations
-export const usersRelations = relations(users, ({ many }) => ({
-  cart: many(cart),
-  orders: many(orders),
-}));
-
-export const productsRelations = relations(products, ({ many }) => ({
-  cartItems: many(cart),
-}));
-
-export const cartRelations = relations(cart, ({ one }) => ({
-  user: one(users, {
-    fields: [cart.userId],
-    references: [users.id],
-  }),
-  product: one(products, {
-    fields: [cart.productId],
-    references: [products.id],
-  }),
-}));
-
-export const ordersRelations = relations(orders, ({ one }) => ({
-  user: one(users, {
-    fields: [orders.userId],
-    references: [users.id],
-  }),
-}));
-
-// Insert schemas
-export const insertUserSchema = createInsertSchema(users).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertProductSchema = createInsertSchema(products).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertCartSchema = createInsertSchema(cart).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertOrderSchema = createInsertSchema(orders).omit({
-  id: true,
-  createdAt: true,
-});
-
-export const insertContactSchema = createInsertSchema(contacts).omit({
-  id: true,
-  createdAt: true,
-});
-
-// Types
+// Type definitions
 export type User = typeof users.$inferSelect;
-export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertUser = typeof users.$inferInsert;
 export type Product = typeof products.$inferSelect;
-export type InsertProduct = z.infer<typeof insertProductSchema>;
+export type InsertProduct = typeof products.$inferInsert;
 export type Cart = typeof cart.$inferSelect;
-export type InsertCart = z.infer<typeof insertCartSchema>;
+export type InsertCart = typeof cart.$inferInsert;
 export type Order = typeof orders.$inferSelect;
-export type InsertOrder = z.infer<typeof insertOrderSchema>;
+export type InsertOrder = typeof orders.$inferInsert;
 export type Contact = typeof contacts.$inferSelect;
-export type InsertContact = z.infer<typeof insertContactSchema>;
+export type InsertContact = typeof contacts.$inferInsert;
+
+// Zod schemas for validation
+export const insertUserSchema = createInsertSchema(users, {
+  email: z.string().email(),
+  password: z.string().min(6),
+  username: z.string().min(3).max(50),
+  firstName: z.string().min(1).max(50),
+  lastName: z.string().min(1).max(50),
+});
+
+export const insertProductSchema = createInsertSchema(products, {
+  name: z.string().min(1).max(255),
+  category: z.string().min(1).max(100),
+  price: z.string().regex(/^\d+(\.\d{1,2})?$/),
+  originalPrice: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+  rating: z.string().regex(/^\d+(\.\d{1})?$/).optional(),
+  inStock: z.number().min(0),
+});
+
+export const insertCartSchema = createInsertSchema(cart, {
+  quantity: z.number().min(1).default(1),
+});
+
+export const insertOrderSchema = createInsertSchema(orders, {
+  items: z.string(),
+  total: z.string().regex(/^\d+(\.\d{1,2})?$/),
+  status: z.string().optional(),
+});
+
+export const insertContactSchema = createInsertSchema(contacts, {
+  name: z.string().min(1).max(100),
+  email: z.string().email(),
+  message: z.string().min(1),
+});

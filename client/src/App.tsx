@@ -10,7 +10,7 @@ import HomePage from "@/pages/home-page";
 import ProductsPage from "@/pages/products-page";
 import ContactPage from "@/pages/contact-page";
 import CartPage from "@/pages/cart-page";
-import AuthPage from "@/pages/auth-page";
+import AuthPage from "@/pages/auth";
 import OrderPage from "@/pages/order-page";
 
 function Router() {

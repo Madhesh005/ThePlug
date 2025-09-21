@@ -18,6 +18,10 @@ import { Link } from "wouter";
 
 type CartItem = Cart & { product: Product };
 
+interface CartResponse {
+  cartItems: CartItem[];
+}
+
 const orderSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
@@ -35,10 +39,24 @@ export default function OrderPage() {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const { data: cartItems = [], isLoading } = useQuery<CartItem[]>({
+  const { data: cartData, isLoading } = useQuery<CartResponse>({
     queryKey: ["/api/cart"],
+    queryFn: async () => {
+      const response = await fetch("/api/cart", {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error("Please log in to view your cart");
+        }
+        throw new Error("Failed to fetch cart");
+      }
+      return response.json();
+    },
     enabled: !!user,
   });
+
+  const cartItems = cartData?.cartItems || [];
 
   const form = useForm<OrderForm>({
     resolver: zodResolver(orderSchema),
@@ -57,20 +75,35 @@ export default function OrderPage() {
   const orderMutation = useMutation({
     mutationFn: async (data: OrderForm) => {
       const orderData = {
-        ...data,
-        items: cartItems.map(item => ({
+        items: JSON.stringify(cartItems.map(item => ({
           productId: item.productId,
           quantity: item.quantity,
           price: item.product.price,
           name: item.product.name,
-        })),
-        totalAmount: total.toFixed(2),
+        }))),
+        total: total.toFixed(2),
+        shippingAddress: JSON.stringify({
+          firstName: data.firstName,
+          lastName: data.lastName,
+          email: data.email,
+          phone: data.phone,
+          address: data.address,
+          city: data.city,
+          zipCode: data.zipCode,
+          notes: data.notes,
+        }),
       };
-      const res = await apiRequest("POST", "/api/orders", orderData);
-      return await res.json();
+      
+      const response = await apiRequest("POST", "/api/orders", orderData);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to place order");
+      }
+      return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       toast({
         title: "Order placed successfully!",
         description: "Your order has been received and will be processed within 2-3 business days.",
@@ -101,6 +134,24 @@ export default function OrderPage() {
     }
     orderMutation.mutate(data);
   };
+
+  if (!user) {
+    return (
+      <div>
+        <Navbar />
+        <main className="py-8">
+          <div className="container mx-auto px-4 text-center">
+            <h2 className="text-2xl font-bold mb-4">Please log in</h2>
+            <p className="text-muted-foreground mb-8">You need to be logged in to place an order.</p>
+            <Link href="/auth">
+              <Button data-testid="button-login">Log In</Button>
+            </Link>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
@@ -166,7 +217,12 @@ export default function OrderPage() {
                                 <FormItem>
                                   <FormLabel>First Name</FormLabel>
                                   <FormControl>
-                                    <Input placeholder="John" {...field} data-testid="input-order-first-name" />
+                                    <Input 
+                                      placeholder="John" 
+                                      {...field} 
+                                      data-testid="input-order-first-name"
+                                      disabled={orderMutation.isPending}
+                                    />
                                   </FormControl>
                                   <FormMessage />
                                 </FormItem>
@@ -179,7 +235,12 @@ export default function OrderPage() {
                                 <FormItem>
                                   <FormLabel>Last Name</FormLabel>
                                   <FormControl>
-                                    <Input placeholder="Doe" {...field} data-testid="input-order-last-name" />
+                                    <Input 
+                                      placeholder="Doe" 
+                                      {...field} 
+                                      data-testid="input-order-last-name"
+                                      disabled={orderMutation.isPending}
+                                    />
                                   </FormControl>
                                   <FormMessage />
                                 </FormItem>
@@ -193,7 +254,13 @@ export default function OrderPage() {
                               <FormItem>
                                 <FormLabel>Email</FormLabel>
                                 <FormControl>
-                                  <Input type="email" placeholder="john@example.com" {...field} data-testid="input-order-email" />
+                                  <Input 
+                                    type="email" 
+                                    placeholder="john@example.com" 
+                                    {...field} 
+                                    data-testid="input-order-email"
+                                    disabled={orderMutation.isPending}
+                                  />
                                 </FormControl>
                                 <FormMessage />
                               </FormItem>
@@ -206,7 +273,13 @@ export default function OrderPage() {
                               <FormItem>
                                 <FormLabel>Phone Number</FormLabel>
                                 <FormControl>
-                                  <Input type="tel" placeholder="+1 (555) 123-4567" {...field} data-testid="input-order-phone" />
+                                  <Input 
+                                    type="tel" 
+                                    placeholder="+1 (555) 123-4567" 
+                                    {...field} 
+                                    data-testid="input-order-phone"
+                                    disabled={orderMutation.isPending}
+                                  />
                                 </FormControl>
                                 <FormMessage />
                               </FormItem>
@@ -219,7 +292,12 @@ export default function OrderPage() {
                               <FormItem>
                                 <FormLabel>Street Address</FormLabel>
                                 <FormControl>
-                                  <Input placeholder="123 Main Street" {...field} data-testid="input-order-address" />
+                                  <Input 
+                                    placeholder="123 Main Street" 
+                                    {...field} 
+                                    data-testid="input-order-address"
+                                    disabled={orderMutation.isPending}
+                                  />
                                 </FormControl>
                                 <FormMessage />
                               </FormItem>
@@ -233,7 +311,12 @@ export default function OrderPage() {
                                 <FormItem>
                                   <FormLabel>City</FormLabel>
                                   <FormControl>
-                                    <Input placeholder="San Francisco" {...field} data-testid="input-order-city" />
+                                    <Input 
+                                      placeholder="San Francisco" 
+                                      {...field} 
+                                      data-testid="input-order-city"
+                                      disabled={orderMutation.isPending}
+                                    />
                                   </FormControl>
                                   <FormMessage />
                                 </FormItem>
@@ -246,7 +329,11 @@ export default function OrderPage() {
                                 <FormItem>
                                   <FormLabel>ZIP Code</FormLabel>
                                   <FormControl>
-                                    <Input placeholder="94102" {...field} data-testid="input-order-zip" />
+                                    <Input 
+                                      placeholder="94102" 
+                                      {...field} 
+                                      disabled={orderMutation.isPending}
+                                    />
                                   </FormControl>
                                   <FormMessage />
                                 </FormItem>
@@ -266,6 +353,7 @@ export default function OrderPage() {
                                     className="resize-none"
                                     {...field}
                                     data-testid="textarea-order-notes"
+                                    disabled={orderMutation.isPending}
                                   />
                                 </FormControl>
                                 <FormMessage />
@@ -300,7 +388,7 @@ export default function OrderPage() {
                               </p>
                               <p className="text-xs text-muted-foreground">Qty: {item.quantity}</p>
                             </div>
-                            <span className="font-semibold text-sm">${(parseFloat(item.product.price) * item.quantity).toFixed(2)}</span>
+                            <span className="font-semibold text-sm">₹{(parseFloat(item.product.price) * item.quantity).toFixed(2)}</span>
                           </div>
                         ))}
                         
@@ -310,7 +398,7 @@ export default function OrderPage() {
                         <div className="space-y-2">
                           <div className="flex justify-between text-sm">
                             <span>Subtotal</span>
-                            <span data-testid="text-order-subtotal">${subtotal.toFixed(2)}</span>
+                            <span data-testid="text-order-subtotal">₹{subtotal.toFixed(2)}</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span>Shipping</span>
@@ -318,12 +406,12 @@ export default function OrderPage() {
                           </div>
                           <div className="flex justify-between text-sm">
                             <span>Tax</span>
-                            <span data-testid="text-order-tax">${tax.toFixed(2)}</span>
+                            <span data-testid="text-order-tax">₹{tax.toFixed(2)}</span>
                           </div>
                           <Separator />
                           <div className="flex justify-between font-semibold">
                             <span>Total</span>
-                            <span className="text-primary" data-testid="text-order-total">${total.toFixed(2)}</span>
+                            <span className="text-primary" data-testid="text-order-total">₹{total.toFixed(2)}</span>
                           </div>
                         </div>
                       </div>

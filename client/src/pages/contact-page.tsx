@@ -15,11 +15,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Send } from "lucide-react";
 
 const contactSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
+  name: z.string().min(1, "Name is required"),
   email: z.string().email("Invalid email address"),
-  orderNumber: z.string().optional(),
-  topic: z.string().min(1, "Please select a topic"),
   message: z.string().min(10, "Message must be at least 10 characters long"),
 });
 
@@ -31,19 +28,20 @@ export default function ContactPage() {
   const form = useForm<ContactForm>({
     resolver: zodResolver(contactSchema),
     defaultValues: {
-      firstName: "",
-      lastName: "",
+      name: "",
       email: "",
-      orderNumber: "",
-      topic: "",
       message: "",
     },
   });
 
   const contactMutation = useMutation({
     mutationFn: async (data: ContactForm) => {
-      const res = await apiRequest("POST", "/api/contact", data);
-      return await res.json();
+      const response = await apiRequest("POST", "/api/contact", data);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to send message");
+      }
+      return response.json();
     },
     onSuccess: () => {
       toast({
@@ -77,89 +75,46 @@ export default function ContactPage() {
               
               <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField
-                      control={form.control}
-                      name="firstName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>First name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Jane" {...field} data-testid="input-first-name" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="lastName"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Last name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Doe" {...field} data-testid="input-last-name" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <FormField
-                      control={form.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Email</FormLabel>
-                          <FormControl>
-                            <Input type="email" placeholder="jane@example.com" {...field} data-testid="input-email" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="orderNumber"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Order number (optional)</FormLabel>
-                          <FormControl>
-                            <Input placeholder="#TM-12345" {...field} data-testid="input-order-number" />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </div>
-                  
                   <FormField
                     control={form.control}
-                    name="topic"
+                    name="name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Topic</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger data-testid="select-topic">
-                              <SelectValue placeholder="Select a topic" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="shipping">Shipping question</SelectItem>
-                            <SelectItem value="product">Product inquiry</SelectItem>
-                            <SelectItem value="return">Return request</SelectItem>
-                            <SelectItem value="technical">Technical support</SelectItem>
-                            <SelectItem value="feedback">General feedback</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <FormLabel>Full name</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="Jane Doe" 
+                            {...field} 
+                            data-testid="input-name"
+                            disabled={contactMutation.isPending}
+                          />
+                        </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                   
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="email" 
+                            placeholder="jane@example.com" 
+                            {...field} 
+                            data-testid="input-email"
+                            disabled={contactMutation.isPending}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                
                   <FormField
                     control={form.control}
                     name="message"
@@ -169,10 +124,11 @@ export default function ContactPage() {
                         <FormControl>
                           <Textarea
                             rows={6}
-                            placeholder="Hi TechMart team, I have a question about delivery times for my order..."
+                            placeholder="Hi The PluG team, I have a question about delivery times for my order..."
                             className="resize-none"
                             {...field}
                             data-testid="textarea-message"
+                            disabled={contactMutation.isPending}
                           />
                         </FormControl>
                         <FormMessage />
@@ -186,6 +142,7 @@ export default function ContactPage() {
                       variant="outline"
                       onClick={() => form.reset()}
                       data-testid="button-cancel"
+                      disabled={contactMutation.isPending}
                     >
                       Cancel
                     </Button>

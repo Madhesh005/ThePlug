@@ -1,31 +1,32 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth } from "./auth";
-import { insertProductSchema, insertCartSchema, insertOrderSchema, insertContactSchema } from "@shared/schema";
+import { setupAuth, requireAuth } from "./auth";
+import { insertProductSchema, insertCartSchema, insertOrderSchema, insertContactSchema } from "../shared/schema";
 
 export function registerRoutes(app: Express): Server {
   // Setup authentication routes
   setupAuth(app);
 
-  // Middleware to check authentication
-  const requireAuth = (req: any, res: any, next: any) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Authentication required" });
-    }
-    next();
-  };
-
   // Product routes
   app.get("/api/products", async (req, res) => {
     try {
+      console.log('GET /api/products - Starting request');
       const { category } = req.query;
-      const products = category 
+      console.log('Category filter:', category);
+      
+      const products = category
         ? await storage.getProductsByCategory(category as string)
         : await storage.getAllProducts();
-      res.json(products);
+      
+      console.log(`Returning ${products.length} products`);
+      res.json({ products });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Get products error:', error);
+      res.status(500).json({ 
+        message: error.message || 'Failed to fetch products',
+        error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
     }
   });
 
@@ -35,9 +36,10 @@ export function registerRoutes(app: Express): Server {
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
       }
-      res.json(product);
+      res.json({ product });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Get product error:', error);
+      res.status(500).json({ message: error.message || 'Failed to fetch product' });
     }
   });
 
@@ -45,9 +47,10 @@ export function registerRoutes(app: Express): Server {
   app.get("/api/cart", requireAuth, async (req, res) => {
     try {
       const cartItems = await storage.getCartItems(req.user!.id);
-      res.json(cartItems);
+      res.json({ cartItems });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Get cart error:', error);
+      res.status(500).json({ message: error.message || 'Failed to fetch cart' });
     }
   });
 
@@ -58,44 +61,66 @@ export function registerRoutes(app: Express): Server {
         userId: req.user!.id,
       });
       const cartItem = await storage.addToCart(validatedData);
-      res.status(201).json(cartItem);
+      res.status(201).json({ 
+        message: "Item added to cart", 
+        cartItem 
+      });
     } catch (error: any) {
-      res.status(400).json({ message: error.message });
+      console.error('Add to cart error:', error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ 
+          message: "Validation error", 
+          errors: error.errors 
+        });
+      }
+      res.status(400).json({ message: error.message || 'Failed to add to cart' });
     }
   });
 
   app.put("/api/cart/:productId", requireAuth, async (req, res) => {
     try {
       const { quantity } = req.body;
+      if (!quantity || quantity < 0) {
+        return res.status(400).json({ message: "Invalid quantity" });
+      }
+
       const cartItem = await storage.updateCartQuantity(
         req.user!.id,
         req.params.productId,
-        quantity
+        parseInt(quantity)
       );
-      if (!cartItem) {
+      
+      if (!cartItem && quantity > 0) {
         return res.status(404).json({ message: "Cart item not found" });
       }
-      res.json(cartItem);
+      
+      res.json({ 
+        message: quantity === 0 ? "Item removed from cart" : "Cart updated",
+        cartItem 
+      });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Update cart error:', error);
+      res.status(500).json({ message: error.message || 'Failed to update cart' });
     }
   });
 
   app.delete("/api/cart/:productId", requireAuth, async (req, res) => {
     try {
       await storage.removeFromCart(req.user!.id, req.params.productId);
-      res.sendStatus(204);
+      res.status(200).json({ message: "Item removed from cart" });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Remove from cart error:', error);
+      res.status(500).json({ message: error.message || 'Failed to remove from cart' });
     }
   });
 
   app.delete("/api/cart", requireAuth, async (req, res) => {
     try {
       await storage.clearCart(req.user!.id);
-      res.sendStatus(204);
+      res.status(200).json({ message: "Cart cleared" });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Clear cart error:', error);
+      res.status(500).json({ message: error.message || 'Failed to clear cart' });
     }
   });
 
@@ -106,23 +131,35 @@ export function registerRoutes(app: Express): Server {
         ...req.body,
         userId: req.user!.id,
       });
+
       const order = await storage.createOrder(validatedData);
-      
+
       // Clear cart after successful order
       await storage.clearCart(req.user!.id);
-      
-      res.status(201).json(order);
+
+      res.status(201).json({
+        message: "Order created successfully",
+        order
+      });
     } catch (error: any) {
-      res.status(400).json({ message: error.message });
+      console.error('Create order error:', error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ 
+          message: "Validation error", 
+          errors: error.errors 
+        });
+      }
+      res.status(400).json({ message: error.message || 'Failed to create order' });
     }
   });
 
   app.get("/api/orders", requireAuth, async (req, res) => {
     try {
       const orders = await storage.getUserOrders(req.user!.id);
-      res.json(orders);
+      res.json({ orders });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Get orders error:', error);
+      res.status(500).json({ message: error.message || 'Failed to fetch orders' });
     }
   });
 
@@ -132,9 +169,10 @@ export function registerRoutes(app: Express): Server {
       if (!order || order.userId !== req.user!.id) {
         return res.status(404).json({ message: "Order not found" });
       }
-      res.json(order);
+      res.json({ order });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error('Get order error:', error);
+      res.status(500).json({ message: error.message || 'Failed to fetch order' });
     }
   });
 
@@ -143,15 +181,26 @@ export function registerRoutes(app: Express): Server {
     try {
       const validatedData = insertContactSchema.parse(req.body);
       const contact = await storage.createContact(validatedData);
-      res.status(201).json(contact);
+      res.status(201).json({
+        message: "Contact form submitted successfully",
+        contact
+      });
     } catch (error: any) {
-      res.status(400).json({ message: error.message });
+      console.error('Contact form error:', error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ 
+          message: "Validation error", 
+          errors: error.errors 
+        });
+      }
+      res.status(400).json({ message: error.message || 'Failed to submit contact form' });
     }
   });
 
   // Seed products route (for initial data)
   app.post("/api/seed-products", async (req, res) => {
     try {
+      console.log('Starting product seeding...');
       const sampleProducts = [
         {
           name: "GameView P7 27\" 4K IPS",
@@ -228,16 +277,51 @@ export function registerRoutes(app: Express): Server {
         },
       ];
 
+      const createdProducts = [];
       for (const productData of sampleProducts) {
-        await storage.createProduct(productData);
+        try {
+          console.log(`Creating product: ${productData.name}`);
+          const product = await storage.createProduct(productData);
+          createdProducts.push(product);
+        } catch (error) {
+          console.error(`Error creating product ${productData.name}:`, error);
+        }
       }
 
-      res.json({ message: "Products seeded successfully" });
+      console.log(`Successfully created ${createdProducts.length} products`);
+      res.json({ 
+        message: "Products seeded successfully", 
+        count: createdProducts.length,
+        products: createdProducts
+      });
     } catch (error: any) {
-      res.status(500).json({ message: error.message });
+      console.error("Seed products error:", error);
+      res.status(500).json({ 
+        message: error?.message || "Failed to seed products",
+        error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+  });
+
+  // Debug route to check database connection and products
+  app.get("/api/debug/products", async (req, res) => {
+    try {
+      console.log('Debug: Checking products...');
+      const products = await storage.getAllProducts();
+      res.json({ 
+        count: products.length,
+        products: products.slice(0, 3), // Return first 3 for debugging
+        sample_structure: products.length > 0 ? Object.keys(products[0]) : []
+      });
+    } catch (error: any) {
+      console.error('Debug products error:', error);
+      res.status(500).json({ 
+        error: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
     }
   });
 
   const httpServer = createServer(app);
   return httpServer;
-}
+} 

@@ -5,7 +5,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { User as SelectUser } from "@shared/schema";
-import { getQueryFn, apiRequest, queryClient } from "../lib/queryClient";
+import { apiRequest, queryClient } from "../lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 type AuthContextType = {
@@ -30,26 +30,64 @@ type RegisterData = {
   lastName: string;
 };
 
+interface UserResponse {
+  user: SelectUser;
+}
+
 export const AuthContext = createContext<AuthContextType | null>(null);
+
+async function fetchCurrentUser(): Promise<SelectUser | null> {
+  try {
+    const response = await fetch("/api/user", {
+      credentials: "include",
+    });
+    
+    if (response.status === 401) {
+      return null;
+    }
+    
+    if (!response.ok) {
+      throw new Error("Failed to fetch user");
+    }
+    
+    const data: UserResponse = await response.json();
+    return data.user || null;
+  } catch (error) {
+    console.error("Error fetching current user:", error);
+    return null;
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const { toast } = useToast();
+  
   const {
     data: user,
     error,
     isLoading,
-  } = useQuery<SelectUser | undefined, Error>({
+  } = useQuery<SelectUser | null, Error>({
     queryKey: ["/api/user"],
-    queryFn: getQueryFn({ on401: "returnNull" }),
+    queryFn: fetchCurrentUser,
+    retry: false,
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {
-      const res = await apiRequest("POST", "/api/login", credentials);
-      return await res.json();
+      const response = await apiRequest("POST", "/api/login", credentials);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Login failed");
+      }
+      
+      const data = await response.json();
+      return data.user;
     },
-    onSuccess: (user: SelectUser) => {
-      queryClient.setQueryData(["/api/user"], user);
+    onSuccess: (userData: SelectUser) => {
+      queryClient.setQueryData(["/api/user"], userData);
+      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
       toast({
         title: "Welcome back!",
         description: "You have been successfully logged in.",
@@ -58,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onError: (error: Error) => {
       toast({
         title: "Login failed",
-        description: error.message,
+        description: error.message || "Invalid username or password",
         variant: "destructive",
       });
     },
@@ -66,11 +104,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const registerMutation = useMutation({
     mutationFn: async (credentials: RegisterData) => {
-      const res = await apiRequest("POST", "/api/register", credentials);
-      return await res.json();
+      const response = await apiRequest("POST", "/api/register", credentials);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Registration failed");
+      }
+      
+      const data = await response.json();
+      return data.user;
     },
-    onSuccess: (user: SelectUser) => {
-      queryClient.setQueryData(["/api/user"], user);
+    onSuccess: (userData: SelectUser) => {
+      queryClient.setQueryData(["/api/user"], userData);
+      queryClient.invalidateQueries({ queryKey: ["/api/cart"] });
       toast({
         title: "Account created!",
         description: "Welcome to TechMart. Your account has been created successfully.",
@@ -79,7 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onError: (error: Error) => {
       toast({
         title: "Registration failed",
-        description: error.message,
+        description: error.message || "Failed to create account. Please try again.",
         variant: "destructive",
       });
     },
@@ -87,10 +133,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", "/api/logout");
+      const response = await apiRequest("POST", "/api/logout");
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Logout failed");
+      }
     },
     onSuccess: () => {
       queryClient.setQueryData(["/api/user"], null);
+      queryClient.removeQueries({ queryKey: ["/api/cart"] });
+      queryClient.removeQueries({ queryKey: ["/api/orders"] });
+      queryClient.clear();
       toast({
         title: "Logged out",
         description: "You have been successfully logged out.",
@@ -99,7 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onError: (error: Error) => {
       toast({
         title: "Logout failed",
-        description: error.message,
+        description: error.message || "An error occurred during logout.",
         variant: "destructive",
       });
     },
